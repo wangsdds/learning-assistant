@@ -43,6 +43,21 @@ CREATE TABLE documents(
         CHECK (docments is not null or websites is not null),
     FOREIGN KEY(user_id)  REfERENCES users(user_id)on delete cascade
 );
+--表 4.1 资料切片/用于全文检索。应用会在写入资料后自动生成。
+CREATE TABLE document_chunks(
+    id INTEGER PRIMARY KEY,
+    document_id INTEGER NOT NULL,
+    chunk_index INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    char_count INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(document_id, chunk_index),
+    FOREIGN KEY(document_id) REFERENCES documents(id) on delete cascade
+);
+-- SQLite FTS5 索引由迁移和应用自动创建，可选手工确认：
+-- CREATE VIRTUAL TABLE document_chunks_fts USING fts5(
+--     content, content='document_chunks', content_rowid='id', tokenize='trigram'
+-- );
 --表 5 系统出题/资料id(外键on delete cascade)，，id（主键），答题时间
 CREATE TABLE question(
     doc_id INTEGER not null,

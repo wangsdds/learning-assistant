@@ -245,6 +245,19 @@
     </form>
   </dialog>
 
+  <dialog id="generate-dialog" class="dialog dialog-wide">
+    <form id="generate-form" class="dialog-card" method="dialog">
+      <div class="dialog-heading">
+        <div><span class="card-kicker">AI QUESTION</span><h2>从资料中智能出题</h2></div>
+        <button class="icon-button" type="button" data-close-dialog aria-label="关闭">×</button>
+      </div>
+      <label class="field"><span>本次学习重点（可选）</span><input id="generate-focus" type="text" maxlength="500" placeholder="例如：回表与覆盖索引"></label>
+      <p class="form-hint">系统会先检索这份资料，再生成带标准答案、评分要点和引用来源的题目草稿。</p>
+      <div class="dialog-actions"><button class="button button-secondary" type="button" data-close-dialog>关闭</button><button class="button button-primary" type="submit">生成题目</button></div>
+      <div id="generate-result" class="ai-result hidden"></div>
+    </form>
+  </dialog>
+
   <dialog id="answer-dialog" class="dialog dialog-wide">
     <div class="dialog-card">
       <div class="dialog-heading">

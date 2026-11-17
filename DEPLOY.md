@@ -43,8 +43,27 @@ sudo nginx -t
 公网访问：
 
 ```text
+http://your-server-ip-or-domain/ui/
 http://your-server-ip-or-domain/docs
 ```
+
+## 启用智能出题
+
+在 `/opt/learning-assistant/.env` 中加入：
+
+```text
+DEEPSEEK_API_KEY=your-key
+```
+
+或者使用其他 OpenAI 兼容服务：
+
+```text
+LLM_API_KEY=your-key
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_MODEL=gpt-4o-mini
+```
+
+修改后执行 `systemctl restart learning-assistant`。未配置密钥时，手工建题和答题功能仍可用，智能出题接口会返回 503。
 
 ## 更新
 
@@ -70,4 +89,5 @@ sudo tail -f /var/log/nginx/error.log
 - 不要把 `.env` 提交到 Git
 - `SECRET_KEY` 必须使用随机值，不能沿用开发默认值
 - 当前使用 SQLite，适合 MVP 演示；后续可切 PostgreSQL
+- 资料全文检索依赖 SQLite FTS5；切换 PostgreSQL 后会使用词项回退，向量检索属于后续阶段
 - 阿里云安全组需放行 `80/443`，SSH `22` 建议只对自己 IP 开放

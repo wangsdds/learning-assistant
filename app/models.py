@@ -26,7 +26,7 @@
 
 from app.db import Base  # noqa: F401  ← 现在只有 import，写完模型后 Alembic 才看得见表
 from datetime import datetime
-from sqlalchemy import String, DateTime, ForeignKey, CheckConstraint,Text
+from sqlalchemy import String, DateTime, ForeignKey, CheckConstraint, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 class User(Base):
     __tablename__="users"
@@ -55,6 +55,17 @@ class Document(Base):
     docments:Mapped[str|None]=mapped_column(Text)
     user_id:Mapped[int]=mapped_column(ForeignKey("users.user_id",ondelete="CASCADE"),index=True)
     websites:Mapped[str|None]=mapped_column(Text)
+class DocumentChunk(Base):
+    __tablename__="document_chunks"
+    __table_args__=(
+        UniqueConstraint("document_id","chunk_index",name="uq_document_chunks_document_index"),
+    )
+    id:Mapped[int]=mapped_column(primary_key=True)
+    document_id:Mapped[int]=mapped_column(ForeignKey("documents.id",ondelete="CASCADE"),index=True)
+    chunk_index:Mapped[int]=mapped_column()
+    content:Mapped[str]=mapped_column(Text)
+    char_count:Mapped[int]=mapped_column()
+    created_at:Mapped[datetime]=mapped_column(DateTime,default=datetime.utcnow)
 class Question(Base):
     __tablename__="question"
     id:Mapped[int]=mapped_column(primary_key=True)

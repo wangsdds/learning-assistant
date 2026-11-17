@@ -1,17 +1,18 @@
-# 学习助手 · 后端
+# 学习助手 · 全栈
 
-> 一个多用户的学习计划 / 资料 / 出题 / 答题后端。FastAPI + SQLAlchemy 2.0 + Alembic，开发期 SQLite，可切换 PostgreSQL。
+> 一个多用户的学习计划 / 资料 / 检索 / 出题 / 答题应用。FastAPI + SQLAlchemy 2.0 + Alembic + SQLite FTS5，可接入 DeepSeek 或 OpenAI 兼容模型。
 
-`Python 3.13` · `FastAPI` · `SQLAlchemy 2.0` · `Alembic` · `JWT` · `30 tests passed`
+`Python 3.13` · `FastAPI` · `SQLAlchemy 2.0` · `Alembic` · `JWT` · `FTS5` · `39 tests passed`
 
 ---
 
 ## 这是什么
 
-把「今天学什么 → 看资料 → 出题 → 答题 → 回看记录」做成一套可用的后端：
+把「今天学什么 → 看资料 → 检索 → 出题 → 答题 → 回看记录」做成一套可用的应用：
 
 - 每个用户有自己的资料、题目、答题记录和计划，互相看不到
-- 题目从资料里生成，答题时服务端记录耗时和评分
+- 资料自动切片并用 SQLite FTS5 检索，模型可以根据引用片段生成结构化题目草稿
+- 答题时服务端记录耗时和评分
 - 有测试、有迁移、有性能实测，不是只能跑一遍的 demo
 
 ## 功能
@@ -23,6 +24,8 @@
 | 题目 | 按资料建题、列题、改题（只改传了的字段） |
 | 答题 | 提交答案（服务端生成耗时与评分）、按题回看 |
 | 计划 | 按天建计划、列表、详情 |
+| 检索 | 资料自动切片；SQLite FTS5 检索，短查询自动回退到词项匹配 |
+| 智能出题 | 检索相关片段，调用 DeepSeek / OpenAI 兼容模型返回题目、答案、rubric 和引用来源 |
 | 隔离 | 所有业务查询都带 `user_id`，跨用户访问统一返回 404 |
 
 ## 技术栈
@@ -33,6 +36,8 @@
 - **数据库**：SQLite（开发）→ PostgreSQL（生产，改 `DATABASE_URL` 即可）
 - **认证**：JWT（PyJWT，HS256）+ bcrypt
 - **测试**：pytest + FastAPI TestClient，内存 SQLite
+- **检索**：SQLite FTS5（trigram）+ 词项回退
+- **模型**：DeepSeek / OpenAI 兼容 Chat Completions，服务端环境变量配置
 
 ## 架构
 
@@ -40,10 +45,13 @@
 app/
 ├── main.py          # 入口：挂路由、Swagger、/health
 ├── db.py            # engine / Base / Session，SQLite 外键 PRAGMA
-├── models.py        # 6 张表的 ORM 模型
+├── models.py        # 7 张表的 ORM 模型
 ├── schemas.py       # Pydantic 请求/响应模型
 ├── security.py      # JWT 签发与校验、get_current_user
-└── routers/         # users / documents / questions / answers / plan_days
+├── chunking.py      # 资料切片
+├── retrieval.py     # FTS5 索引、检索与回退
+├── llm.py           # DeepSeek / OpenAI 兼容出题客户端
+└── routers/         # users / documents / questions / answers / plan_days / rag
 ```
 
 请求链路：
@@ -52,16 +60,18 @@ app/
 HTTP → APIRouter → Depends(get_current_user) → SQLAlchemy Session → SQLite / PostgreSQL
 ```
 
-## 数据模型（6 张表）
+## 数据模型（7 张表）
 
 ```
 users ──< plan_days ──< newplan
-  └──< documents ──< question ──< answer
+  └──< documents ──< document_chunks
+          └──< question ──< answer
 ```
 
-- 所有外键带 `ondelete="CASCADE"`，删除用户时六张表在**一个事务**里归零
+- 所有外键带 `ondelete="CASCADE"`，删除用户时关联数据在**一个事务**里归零
 - SQLite 默认不检查外键，`db.py` 在每个连接上执行 `PRAGMA foreign_keys=ON`
 - `documents` 上有 CHECK 约束：文件和网址至少填一个
+- `document_chunks` 保存资料切片，由 FTS5 触发器同步全文索引
 
 ## 快速开始
 
@@ -69,22 +79,26 @@ users ──< plan_days ──< newplan
 # 1. 安装依赖
 python -m pip install -r requirements.txt bcrypt pyjwt
 
-# 2. 运行完整闭环演示
+# 2. 执行数据库迁移
+python -m alembic upgrade head
+
+# 3. 运行完整闭环演示
 python tools/demo_flow.py
 
-# 3. 启动
+# 4. 启动
 python -m uvicorn app.main:app --reload --port 8000
 
-# 4. 打开浏览器 UI
+# 5. 打开浏览器 UI
 # http://127.0.0.1:8000/ui/
 
-# 5. 打开 Swagger
+# 6. 打开 Swagger
 # http://127.0.0.1:8000/docs
 ```
 
 本机也可以直接跑 `.\run_api.ps1`（脚本里固定了 Python 与 site-packages 路径）。
 
 浏览器 UI 使用原生 HTML/CSS/JavaScript，与 API 同源部署，覆盖登录注册、学习计划、资料收录、建题、答题和作答历史。根路径 `/` 会自动跳转到 `/ui/`。
+在资料详情中点击「AI 出题」，系统会先检索切片，再生成带标准答案、评分要点和引用来源的题目草稿。
 
 一键演示会在内存 SQLite 中依次完成注册、登录、建计划、加资料、出题、答题和回看，不会污染 `app.db`。
 
@@ -97,8 +111,37 @@ python -m uvicorn app.main:app --reload --port 8000
 | `DATABASE_URL` | `sqlite:///app.db` | 切 PostgreSQL 改这里 |
 | `SECRET_KEY` | `dev-only-change-me` | **生产必须改** |
 | `SQL_ECHO` | 空 | 设为 `1` 打印 SQL |
+| `DEEPSEEK_API_KEY` | 空 | 配置后启用 DeepSeek 出题 |
+| `LLM_API_KEY` | 空 | 其他 OpenAI 兼容服务的密钥 |
+| `LLM_BASE_URL` | 按提供商 | 例如 `https://api.openai.com/v1` |
+| `LLM_MODEL` | `deepseek-chat` / `gpt-4o-mini` | 模型名称 |
+| `LLM_TRUST_ENV` | `false` | 设为 `true` 时读取系统代理环境变量 |
 
-## API 概览（13 个路径 / 17 个操作）
+## 智能出题配置
+
+DeepSeek 示例：
+
+```powershell
+$env:DEEPSEEK_API_KEY = "your-key"
+python -m uvicorn app.main:app --reload --port 8000
+```
+
+其他 OpenAI 兼容服务使用 `LLM_API_KEY`、`LLM_BASE_URL` 和 `LLM_MODEL`。密钥只放服务端环境变量，不会返回给浏览器。
+
+接口调用顺序：
+
+```text
+POST /documents
+  → 自动切片并写入 FTS5
+GET  /documents/{id}/search?q=回表
+  → 返回相关片段
+POST /documents/{id}/generate-question
+  → 返回题目、答案、rubric、难度和引用来源
+```
+
+当前生成结果只是题目草稿，不会自动写入 `question` 表；自动批改和会话循环属于下一阶段。
+
+## API 概览（16 个路径 / 20 个操作）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -110,6 +153,9 @@ python -m uvicorn app.main:app --reload --port 8000
 | GET | `/documents` | 资料列表 |
 | POST | `/documents` | 新建资料 |
 | GET | `/documents/{document_id}` | 资料详情 |
+| POST | `/documents/{document_id}/reindex` | 重建资料切片与全文索引 |
+| GET | `/documents/{document_id}/search` | 在本人资料中检索相关片段 |
+| POST | `/documents/{document_id}/generate-question` | 检索并生成结构化题目草稿 |
 | POST | `/documents/{document_id}/questions` | 给资料建题 |
 | GET | `/documents/{document_id}/questions` | 资料的题目列表 |
 | PATCH | `/questions/{question_id}` | 改题（只改传入字段） |
@@ -124,7 +170,7 @@ python -m uvicorn app.main:app --reload --port 8000
 
 ```powershell
 pytest -q
-# 30 passed in 12.67s
+# 39 passed
 ```
 
 覆盖的关键边界：
@@ -134,7 +180,9 @@ pytest -q
 - 重复邮箱注册 → 409
 - 只改题干 / 只改答案 / 空对象 / 空题干
 - 跨用户改题、跨用户答题
-- 删除用户后六张表级联清空
+- 删除用户后关联表级联清空
+- 资料切片长度、中文检索、跨用户检索隔离
+- 模型返回值的结构化校验和来源约束（测试使用 Fake LLM）
 
 ## 性能实测
 
@@ -151,7 +199,7 @@ pytest -q
 
 1. **跨用户为什么返回 404 而不是 403**：403 等于告诉对方“这个资源存在，只是你没权限”，404 不泄露存在性。
 2. **邮箱唯一为什么靠数据库约束**：应用层“先查再插”有竞态，两个请求同时通过检查会插出两条；直接 `commit` 捕获 `IntegrityError` 转 409 才是原子的。
-3. **级联删除为什么必须在一个事务里**：六张表任一失败都要整体回滚，否则会留下孤儿数据。
+3. **级联删除为什么必须在一个事务里**：任一关联表失败都要整体回滚，否则会留下孤儿数据。
 4. **JWT 无状态怎么登出**：服务端不存 session，登出由客户端丢弃 token；需要强制失效时再加黑名单或短过期 + refresh token。
 
 ## 目录结构
@@ -159,7 +207,7 @@ pytest -q
 ```
 项目-学习助手/
 ├── app/                 # 应用代码
-├── tests/               # pytest（32 个用例）
+├── tests/               # pytest（39 个用例）
 ├── migrations/          # Alembic 迁移
 ├── docs/                # 表设计、评审记录、schema.sql
 ├── tools/               # bench_fk_index.py 等
@@ -171,14 +219,16 @@ pytest -q
 
 - [ ] 统一异常响应格式与分页
 - [ ] 用户查询接口的权限收敛（仅允许本人访问）
-- [ ] 检索层：资料切分 + 向量检索
-- [ ] agent loop + tool calling
+- [x] 检索层：资料切片 + SQLite FTS5
+- [x] 结构化题目生成（带答案、rubric 和来源）
+- [ ] 自动批改、学习会话状态和 agent loop
+- [ ] 向量检索与混合召回
 - [ ] 生产部署：PostgreSQL + Docker Compose
 
 ## 截图清单（发帖 / 简历用）
 
 1. `http://127.0.0.1:8000/ui/` 的工作台与资料答题页
 2. `http://127.0.0.1:8000/docs` 的 Swagger 首页
-3. `pytest -q` 的 `32 passed` 输出
+3. `pytest -q` 的 `39 passed` 输出
 4. `python tools/bench_fk_index.py` 的优化前后对比
-5. `docs/schema.sql` 的六表关系图（dbdiagram.io 导入即可）
+5. `docs/schema.sql` 的表关系图（dbdiagram.io 导入即可）

@@ -355,7 +355,10 @@ function renderDocDetail(loading = false) {
   container.innerHTML = `
     <div class="detail-head">
       <div><span class="card-kicker">MATERIAL</span><h2>${escapeHtml(document.documents_name)}</h2><p>资料 #${document.id} · ${document.websites ? "网址资料" : "本地资料"}</p></div>
-      <button class="button button-primary button-small" type="button" data-add-question>新增题目</button>
+      <div class="detail-actions">
+        <button class="button button-secondary button-small" type="button" data-generate-question>AI 出题</button>
+        <button class="button button-primary button-small" type="button" data-add-question>新增题目</button>
+      </div>
     </div>
     <div class="source-block"><span class="source-label">SOURCE</span>${source || '<span>没有外部链接</span>'}</div>
     ${preview}
@@ -416,6 +419,35 @@ function openQuestionDialog() {
   $("#question-form").reset();
   $("#question-dialog").showModal();
   $("#question-text").focus();
+}
+
+function openGenerateDialog() {
+  if (!state.currentDocId) return;
+  $("#generate-form").reset();
+  $("#generate-result").classList.add("hidden");
+  $("#generate-result").innerHTML = "";
+  $("#generate-dialog").showModal();
+  $("#generate-focus").focus();
+}
+
+function renderGeneratedQuestion(draft) {
+  const rubric = draft.rubric.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+  const sources = draft.sources.map((source) => `
+    <details class="source-detail">
+      <summary>片段 #${source.chunk_index + 1} · ${escapeHtml(draft.model)}</summary>
+      <p>${escapeHtml(source.content)}</p>
+    </details>
+  `).join("");
+  const difficultyLabels = { easy: "基础", medium: "进阶", hard: "挑战" };
+  const container = $("#generate-result");
+  container.innerHTML = `
+    <div class="ai-result-head"><span>AI 草稿 · 尚未保存</span><strong>${escapeHtml(difficultyLabels[draft.difficulty] || draft.difficulty)}</strong></div>
+    <h3>${escapeHtml(draft.question)}</h3>
+    <div class="ai-answer"><span class="card-kicker">参考答案</span><p>${escapeHtml(draft.expected_answer)}</p></div>
+    <div class="ai-rubric"><span class="card-kicker">评分要点</span><ol>${rubric}</ol></div>
+    <div class="ai-sources"><span class="card-kicker">引用资料</span>${sources}</div>
+  `;
+  container.classList.remove("hidden");
 }
 
 function startAnswerTimer() {
@@ -556,6 +588,10 @@ function bindEvents() {
   });
 
   $("#doc-detail").addEventListener("click", (event) => {
+    if (event.target.closest("[data-generate-question]")) {
+      openGenerateDialog();
+      return;
+    }
     if (event.target.closest("[data-add-question]")) {
       openQuestionDialog();
       return;
@@ -651,6 +687,30 @@ function bindEvents() {
       await loadQuestions(state.currentDocId);
       showToast("题目已保存");
     } catch (error) {
+      showToast(error.message, "error");
+    } finally {
+      setFormBusy(form, false);
+    }
+  });
+
+  $("#generate-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const focus = $("#generate-focus").value.trim();
+    if (!state.currentDocId) return showToast("请先选择资料", "error");
+    const container = $("#generate-result");
+    container.classList.remove("hidden");
+    container.innerHTML = '<div class="ai-loading">正在检索资料并生成题目，通常需要几秒钟…</div>';
+    setFormBusy(form, true);
+    try {
+      const draft = await api(`/documents/${state.currentDocId}/generate-question`, {
+        method: "POST",
+        body: JSON.stringify(focus ? { focus } : {}),
+      });
+      renderGeneratedQuestion(draft);
+      showToast("题目草稿已生成");
+    } catch (error) {
+      container.innerHTML = `<div class="ai-error">${escapeHtml(error.message)}</div>`;
       showToast(error.message, "error");
     } finally {
       setFormBusy(form, false);

@@ -1,19 +1,20 @@
-# 学习助手后端｜简历与面试材料
+# 学习助手全栈｜简历与面试材料
 
 ## 一句话项目介绍
 
-基于 FastAPI + SQLAlchemy 构建的多用户学习助手后端，支持学习计划、资料管理、题目生成、答题评分和答题记录回看，使用 JWT 做认证并按用户隔离数据。
+基于 FastAPI + SQLAlchemy 构建的多用户学习助手，支持学习计划、资料管理、FTS5 检索、结构化题目生成、答题评分和记录回看，使用 JWT 认证并按用户隔离数据。
 
 ## 技术栈
 
-Python 3.13、FastAPI、SQLAlchemy 2.0、Alembic、SQLite / PostgreSQL、JWT、bcrypt、pytest、Swagger/OpenAPI、HTML/CSS/JavaScript
+Python 3.13、FastAPI、SQLAlchemy 2.0、Alembic、SQLite / PostgreSQL、SQLite FTS5、DeepSeek / OpenAI 兼容 API、JWT、bcrypt、pytest、Swagger/OpenAPI、HTML/CSS/JavaScript
 
 ## 简历项目栏（可直接使用）
 
-- 设计并实现多用户学习助手后端，覆盖注册登录、学习计划、资料、题目、答题记录等核心模块，提供 17 个 REST API。
+- 设计并实现多用户学习助手全栈应用，覆盖注册登录、学习计划、资料、题目、答题记录等核心模块，提供 20 个 REST API。
 - 基于 JWT + bcrypt 实现认证与密码安全存储，所有业务查询按当前用户过滤；跨用户访问统一返回 404，避免泄露资源存在性。
-- 使用 SQLAlchemy 2.0 ORM 与 Alembic 管理 6 张表及外键级联，补充外键索引；在 5 万行测试数据上将关联查询从约 12.86ms 降至 0.138ms。
-- 使用 `APIRouter` 按领域拆分用户、资料、题目、答题和计划模块，并通过 pytest + 内存 SQLite 构建 32 个测试，覆盖认证、隔离、边界校验和完整业务闭环。
+- 使用 SQLAlchemy 2.0 ORM 与 Alembic 管理 7 张表及外键级联，补充外键索引；在 5 万行测试数据上将关联查询从约 12.86ms 降至 0.138ms。
+- 实现资料切片与 SQLite FTS5 检索，短查询自动降级为词项匹配；调用 DeepSeek / OpenAI 兼容模型生成带标准答案、rubric、难度和引用来源的结构化题目草稿。
+- 使用 `APIRouter` 按领域拆分用户、资料、题目、答题、计划和 RAG 模块，并通过 pytest + 内存 SQLite 构建 39 个测试，覆盖认证、隔离、边界校验、中文检索和完整业务闭环。
 - 提供原生 JavaScript 浏览器 UI，覆盖登录注册、学习计划、资料、建题、答题和历史回看；通过 Nginx + systemd 部署到云服务器。
 
 ## 面试讲解提纲
@@ -26,7 +27,7 @@ Python 3.13、FastAPI、SQLAlchemy 2.0、Alembic、SQLite / PostgreSQL、JWT、b
 
 ### 2. 数据一致性
 
-- 6 张表通过外键和 `ON DELETE CASCADE` 建立关联。
+- 7 张表通过外键和 `ON DELETE CASCADE` 建立关联。
 - SQLite 默认不启用外键检查，因此在每个连接上执行 `PRAGMA foreign_keys=ON`。
 - 邮箱唯一性依赖数据库约束，捕获 `IntegrityError` 后回滚并返回 409，避免“先查再插”的竞态。
 
@@ -34,11 +35,17 @@ Python 3.13、FastAPI、SQLAlchemy 2.0、Alembic、SQLite / PostgreSQL、JWT、b
 
 - 每个测试使用独立的内存 SQLite，通过 `dependency_overrides` 替换真实数据库。
 - 端到端测试覆盖：注册 → 登录 → 计划 → 资料 → 出题 → 答题 → 回看。
-- 先用测试锁定行为，再把单体 `main.py` 拆成多个 router；当前全套仍为 32 passed。
+- 先用测试锁定行为，再把单体 `main.py` 拆成多个 router；当前全套为 39 passed。
 
-### 4. 当前边界
+### 4. 检索与结构化出题
 
-当前版本是可演示的全栈 MVP，已部署到云服务器；检索层、RAG、agent loop、流式返回，以及 PostgreSQL/Docker 的生产级部署尚未实现。面试时应明确区分“已完成”和“下一步计划”，不要把这些说成已完成。
+- 资料写入后按长度和句界切成重叠片段，使用 FTS5 trigram 索引；中文短查询不足三个字符时回退到词项匹配。
+- 出题前只把当前用户、当前资料的相关片段交给模型，要求返回严格 JSON；服务端用 Pydantic 校验结构，并过滤不属于检索结果的来源 ID。
+- 模型只负责出题，不直接写数据库；密钥保存在服务端环境变量，资料文本被视为不可信输入，要求模型忽略其中的指令。
+
+### 5. 当前边界
+
+已完成 FTS5 检索和 RAG 结构化出题草稿，但自动批改、学习会话状态、agent loop、向量检索、流式返回，以及 PostgreSQL/Docker 的生产级部署尚未实现。面试时应明确区分“已完成”和“下一步计划”，不要把这些说成已完成。
 
 ## 演示顺序
 
@@ -57,4 +64,4 @@ pytest -q
 
 ## 简历投递时的项目一句话
 
-> 独立开发多用户学习助手全栈 MVP，使用 FastAPI + SQLAlchemy + JWT 实现计划、资料、出题与答题闭环，配套浏览器 UI、分层路由、数据库迁移和 32 个自动化测试。
+> 独立开发多用户学习助手全栈 MVP，使用 FastAPI + SQLAlchemy + JWT 实现计划、资料、FTS5 检索、RAG 结构化出题与答题闭环，配套浏览器 UI、云服务器部署、数据库迁移和 39 个自动化测试。

@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """API 输出结构。把下面的 TODO 补完。"""
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, EmailStr, Field,field_validator, model_validator
 
 class UserOut(BaseModel):
@@ -111,3 +113,56 @@ class AnswerOut(BaseModel):
     costtime: int
     answer_time: str
     model_config = ConfigDict(from_attributes=True)
+
+
+class ChunkSearchResult(BaseModel):
+    chunk_id: int
+    chunk_index: int
+    content: str
+    score: float
+
+
+class DocumentIndexOut(BaseModel):
+    document_id: int
+    chunks: int
+
+
+class QuestionGenerationRequest(BaseModel):
+    focus: str | None = Field(default=None, max_length=500)
+
+    @field_validator("focus")
+    @classmethod
+    def normalize_focus(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        return value or None
+
+
+class GeneratedQuestionDraft(BaseModel):
+    question: str = Field(min_length=1, max_length=1200)
+    expected_answer: str = Field(min_length=1, max_length=4000)
+    rubric: list[str] = Field(min_length=1, max_length=8)
+    difficulty: Literal["easy", "medium", "hard"]
+    source_chunk_ids: list[int] = Field(min_length=1, max_length=8)
+
+    @field_validator("question", "expected_answer")
+    @classmethod
+    def strip_required_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("must not be empty")
+        return value
+
+    @field_validator("rubric")
+    @classmethod
+    def strip_rubric(cls, value: list[str]) -> list[str]:
+        items = [item.strip()[:500] for item in value if item.strip()]
+        if not items:
+            raise ValueError("rubric must not be empty")
+        return items
+
+
+class GeneratedQuestionOut(GeneratedQuestionDraft):
+    model: str
+    sources: list[ChunkSearchResult]

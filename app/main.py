@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import answers, documents, plan_days, questions, users
+from app.routers import answers, documents, plan_days, questions, rag, users
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -21,6 +21,7 @@ app.include_router(questions.router)
 app.include_router(answers.router)
 app.include_router(plan_days.router)
 app.include_router(users.router)
+app.include_router(rag.router)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 app.mount("/ui", StaticFiles(directory=BASE_DIR / "static" / "ui", html=True), name="ui")
 
