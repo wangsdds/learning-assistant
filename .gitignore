@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+*.bak-*
+
+# Runtime and secrets
+app.db
+*.db
+.env
+
+# Local-only learning material
+lessons/
+assets/
+reference/
+docs/reference/
+statement_*.txt
+$null
+
+# Local notes and editor settings
+NOTES.md
+MISSION.md
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
