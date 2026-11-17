@@ -85,6 +85,15 @@ function safeHost(value) {
   }
 }
 
+function safeHttpUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
 function initials(name) {
   const parts = Array.from(String(name ?? "").trim());
   return parts.slice(0, 2).join("").toUpperCase() || "L";
@@ -322,9 +331,12 @@ function renderDocDetail(loading = false) {
     return;
   }
 
-  const source = document.websites
-    ? `<a href="${escapeHtml(document.websites)}" target="_blank" rel="noopener">${escapeHtml(safeHost(document.websites))} ↗</a>`
-    : "";
+  const sourceUrl = safeHttpUrl(document.websites);
+  const source = sourceUrl
+    ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener">${escapeHtml(safeHost(sourceUrl))} ↗</a>`
+    : document.websites
+      ? `<span>${escapeHtml(document.websites)}</span>`
+      : "";
   const preview = document.docments
     ? `<div class="source-preview">${escapeHtml(document.docments)}</div>`
     : "";
