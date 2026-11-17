@@ -2,7 +2,7 @@
 
 > 一个多用户的学习计划 / 资料 / 检索 / 出题 / 答题应用。FastAPI + SQLAlchemy 2.0 + Alembic + SQLite FTS5，可接入 DeepSeek 或 OpenAI 兼容模型。
 
-`Python 3.13` · `FastAPI` · `SQLAlchemy 2.0` · `Alembic` · `JWT` · `FTS5` · `39 tests passed`
+`Python 3.13` · `FastAPI` · `SQLAlchemy 2.0` · `Alembic` · `JWT` · `FTS5` · `46 tests passed`
 
 ---
 
@@ -12,7 +12,7 @@
 
 - 每个用户有自己的资料、题目、答题记录和计划，互相看不到
 - 资料自动切片并用 SQLite FTS5 检索，模型可以根据引用片段生成结构化题目草稿
-- 答题时服务端记录耗时和评分
+- 整数题服务端精确判分；文本题按 rubric 调用模型批改，返回分数、命中点和遗漏点
 - 有测试、有迁移、有性能实测，不是只能跑一遍的 demo
 
 ## 功能
@@ -21,11 +21,12 @@
 |---|---|
 | 用户 | 注册、登录（bcrypt + JWT）、获取当前用户 |
 | 资料 | 新建、列表、详情；文件或网址至少填一个（数据库 CHECK 约束） |
-| 题目 | 按资料建题、列题、改题（只改传了的字段） |
-| 答题 | 提交答案（服务端生成耗时与评分）、按题回看 |
+| 题目 | 按资料建题、列题、改题；支持整数题和文本题，标准答案只保存在服务端 |
+| 答题 | 整数题精确判分；文本题 AI 批改；按题回看分数、反馈和历史 |
 | 计划 | 按天建计划、列表、详情 |
 | 检索 | 资料自动切片；SQLite FTS5 检索，短查询自动回退到词项匹配 |
-| 智能出题 | 检索相关片段，调用 DeepSeek / OpenAI 兼容模型返回题目、答案、rubric 和引用来源 |
+| 智能出题 | 检索相关片段，调用 DeepSeek / OpenAI 兼容模型返回题目、答案、rubric 和引用来源；草稿可一键入库 |
+| 自动批改 | 按参考答案和 rubric 评分，返回 0-100 分、命中要点、遗漏要点和改进建议，并持久化到作答记录 |
 | 隔离 | 所有业务查询都带 `user_id`，跨用户访问统一返回 404 |
 
 ## 技术栈
@@ -111,7 +112,7 @@ python -m uvicorn app.main:app --reload --port 8000
 | `DATABASE_URL` | `sqlite:///app.db` | 切 PostgreSQL 改这里 |
 | `SECRET_KEY` | `dev-only-change-me` | **生产必须改** |
 | `SQL_ECHO` | 空 | 设为 `1` 打印 SQL |
-| `DEEPSEEK_API_KEY` | 空 | 配置后启用 DeepSeek 出题 |
+| `DEEPSEEK_API_KEY` | 空 | 配置后启用 DeepSeek 出题与批改 |
 | `LLM_API_KEY` | 空 | 其他 OpenAI 兼容服务的密钥 |
 | `LLM_BASE_URL` | 按提供商 | 例如 `https://api.openai.com/v1` |
 | `LLM_MODEL` | `deepseek-chat` / `gpt-4o-mini` | 模型名称 |
@@ -137,11 +138,15 @@ GET  /documents/{id}/search?q=回表
   → 返回相关片段
 POST /documents/{id}/generate-question
   → 返回题目、答案、rubric、难度和引用来源
+POST /documents/{id}/questions/from-draft
+  → 校验引用片段后，把草稿保存成正式文本题
+POST /questions/{id}/answers/grade
+  → 按 rubric 批改文本答案并写入作答记录
 ```
 
-当前生成结果只是题目草稿，不会自动写入 `question` 表；自动批改和会话循环属于下一阶段。
+模型生成结果先作为草稿展示，用户确认后再写入 `question` 表。参考答案和 rubric 不会通过题目列表接口返回；批改结果的命中点、遗漏点和反馈会随作答记录保存。
 
-## API 概览（16 个路径 / 20 个操作）
+## API 概览（18 个路径 / 22 个操作）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -157,9 +162,11 @@ POST /documents/{id}/generate-question
 | GET | `/documents/{document_id}/search` | 在本人资料中检索相关片段 |
 | POST | `/documents/{document_id}/generate-question` | 检索并生成结构化题目草稿 |
 | POST | `/documents/{document_id}/questions` | 给资料建题 |
+| POST | `/documents/{document_id}/questions/from-draft` | 保存 AI 草稿为正式文本题 |
 | GET | `/documents/{document_id}/questions` | 资料的题目列表 |
 | PATCH | `/questions/{question_id}` | 改题（只改传入字段） |
-| POST | `/questions/{question_id}/answers` | 提交答案 |
+| POST | `/questions/{question_id}/answers` | 提交整数题答案 |
+| POST | `/questions/{question_id}/answers/grade` | AI 批改文本题答案 |
 | GET | `/questions/{question_id}/answers` | 答案列表 |
 | GET | `/plan_days` | 计划列表 |
 | POST | `/plan_days` | 新建计划 |
@@ -170,7 +177,7 @@ POST /documents/{id}/generate-question
 
 ```powershell
 pytest -q
-# 39 passed
+# 46 passed
 ```
 
 覆盖的关键边界：
@@ -183,6 +190,7 @@ pytest -q
 - 删除用户后关联表级联清空
 - 资料切片长度、中文检索、跨用户检索隔离
 - 模型返回值的结构化校验和来源约束（测试使用 Fake LLM）
+- 文本题答案不外泄、草稿引用片段归属校验、批改明细持久化和跨用户批改隔离
 
 ## 性能实测
 
@@ -207,7 +215,7 @@ pytest -q
 ```
 项目-学习助手/
 ├── app/                 # 应用代码
-├── tests/               # pytest（39 个用例）
+├── tests/               # pytest（46 个用例）
 ├── migrations/          # Alembic 迁移
 ├── docs/                # 表设计、评审记录、schema.sql
 ├── tools/               # bench_fk_index.py 等
@@ -221,7 +229,8 @@ pytest -q
 - [ ] 用户查询接口的权限收敛（仅允许本人访问）
 - [x] 检索层：资料切片 + SQLite FTS5
 - [x] 结构化题目生成（带答案、rubric 和来源）
-- [ ] 自动批改、学习会话状态和 agent loop
+- [x] 基于 rubric 的文本题 AI 批改与评分明细持久化
+- [ ] 学习会话状态和 agent loop
 - [ ] 向量检索与混合召回
 - [ ] 生产部署：PostgreSQL + Docker Compose
 
@@ -229,6 +238,6 @@ pytest -q
 
 1. `http://127.0.0.1:8000/ui/` 的工作台与资料答题页
 2. `http://127.0.0.1:8000/docs` 的 Swagger 首页
-3. `pytest -q` 的 `39 passed` 输出
+3. `pytest -q` 的 `46 passed` 输出
 4. `python tools/bench_fk_index.py` 的优化前后对比
 5. `docs/schema.sql` 的表关系图（dbdiagram.io 导入即可）

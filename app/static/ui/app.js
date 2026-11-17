@@ -10,6 +10,7 @@ const state = {
   answerQuestionId: null,
   answerStartedAt: null,
   answerTimer: null,
+  generatedDraft: null,
   toastTimer: null,
   view: "dashboard",
 };
@@ -131,6 +132,10 @@ function formatApiError(payload) {
     "document not found": "没有找到这份资料",
     "question not found": "没有找到这道题",
     "docments or websites is required": "资料内容与来源网址至少填写一项",
+    "text questions must be submitted to the grade endpoint": "文本题请使用 AI 批改",
+    "only text questions can be graded by the model": "只有文本题支持 AI 批改",
+    "LLM provider is not configured": "AI 服务尚未配置，请联系管理员",
+    "source_chunk_ids must belong to this document": "草稿引用的资料片段不属于当前资料",
   };
   return messages[payload.detail] || payload.detail || "请求失败，请稍后再试";
 }
@@ -346,7 +351,7 @@ function renderDocDetail(loading = false) {
     : state.questions.length
       ? state.questions.map((question) => `
           <article class="question-item">
-            <div class="question-body"><p>${escapeHtml(question.que)}</p><span>题目 #${question.id}</span></div>
+            <div class="question-body"><p>${escapeHtml(question.que)}</p><span>${question.question_type === "text" ? "文本题 · AI 批改" : "整数题 · 自动判分"} · 题目 #${question.id}</span></div>
             <button class="button button-secondary" type="button" data-answer-question="${question.id}">开始答题</button>
           </article>
         `).join("")
@@ -423,6 +428,7 @@ function openQuestionDialog() {
 
 function openGenerateDialog() {
   if (!state.currentDocId) return;
+  state.generatedDraft = null;
   $("#generate-form").reset();
   $("#generate-result").classList.add("hidden");
   $("#generate-result").innerHTML = "";
@@ -431,6 +437,7 @@ function openGenerateDialog() {
 }
 
 function renderGeneratedQuestion(draft) {
+  state.generatedDraft = draft;
   const rubric = draft.rubric.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
   const sources = draft.sources.map((source) => `
     <details class="source-detail">
@@ -446,8 +453,53 @@ function renderGeneratedQuestion(draft) {
     <div class="ai-answer"><span class="card-kicker">参考答案</span><p>${escapeHtml(draft.expected_answer)}</p></div>
     <div class="ai-rubric"><span class="card-kicker">评分要点</span><ol>${rubric}</ol></div>
     <div class="ai-sources"><span class="card-kicker">引用资料</span>${sources}</div>
+    <div class="ai-actions"><button class="button button-primary" type="button" data-save-draft>采用并保存为练习</button></div>
   `;
   container.classList.remove("hidden");
+}
+
+function renderGradeResult(result) {
+  const container = $("#answer-feedback");
+  const hits = result.rubric_hits.length
+    ? `<ul>${result.rubric_hits.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+    : '<p class="muted">没有命中评分要点。</p>';
+  const misses = result.rubric_misses.length
+    ? `<ul>${result.rubric_misses.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+    : '<p class="muted">没有明显遗漏。</p>';
+  container.innerHTML = `
+    <div class="grade-head"><span>AI 批改</span><strong>${result.score} 分</strong></div>
+    <p class="grade-feedback">${escapeHtml(result.feedback)}</p>
+    <div class="grade-rubric"><div><span class="card-kicker">已命中</span>${hits}</div><div><span class="card-kicker">待补强</span>${misses}</div></div>
+    <p class="grade-model">由 ${escapeHtml(result.model)} 生成，仅作为学习反馈。</p>
+  `;
+  container.classList.remove("hidden");
+}
+
+async function saveGeneratedDraft() {
+  const draft = state.generatedDraft;
+  if (!draft || !state.currentDocId) return showToast("请先生成题目草稿", "error");
+  const button = $("[data-save-draft]");
+  if (button) button.disabled = true;
+  try {
+    await api(`/documents/${state.currentDocId}/questions/from-draft`, {
+      method: "POST",
+      body: JSON.stringify({
+        question: draft.question,
+        expected_answer: draft.expected_answer,
+        rubric: draft.rubric,
+        difficulty: draft.difficulty,
+        source_chunk_ids: draft.source_chunk_ids,
+      }),
+    });
+    state.generatedDraft = null;
+    $("#generate-dialog").close();
+    await loadQuestions(state.currentDocId);
+    showToast("题目已保存，可以直接开始作答");
+  } catch (error) {
+    showToast(error.message, "error");
+  } finally {
+    if (button) button.disabled = false;
+  }
 }
 
 function startAnswerTimer() {
@@ -472,6 +524,11 @@ async function openAnswerDialog(questionId) {
   state.answerQuestionId = questionId;
   $("#answer-question-text").textContent = question.que;
   $("#answer-input").value = "";
+  const isTextQuestion = question.question_type === "text";
+  $("#answer-submit").textContent = isTextQuestion ? "提交并批改" : "提交答案";
+  $("#answer-input").placeholder = isTextQuestion ? "写出你的理解，AI 会按评分要点批改" : "先自己回答，再提交";
+  $("#answer-feedback").classList.add("hidden");
+  $("#answer-feedback").innerHTML = "";
   $("#answer-history").innerHTML = '<div class="empty-inline">正在读取作答记录…</div>';
   startAnswerTimer();
   $("#answer-dialog").showModal();
@@ -497,12 +554,18 @@ function renderAnswerHistory(answers) {
   }
   container.innerHTML = answers.map((answer) => {
     const correct = answer.scores === "1";
+    const graded = Boolean(answer.grade_model || answer.rubric_hits.length || answer.rubric_misses.length);
+    const scoreLabel = graded ? `${answer.scores} 分` : correct ? "答对" : "未答对";
+    const feedback = answer.feedback
+      ? `<p class="history-feedback">${escapeHtml(answer.feedback)}</p>`
+      : "";
     return `
       <div class="history-item">
-        <span class="score-dot${correct ? " correct" : ""}"></span>
+        <span class="score-dot${correct || graded ? " correct" : ""}"></span>
         <div class="history-body">
           <p>${escapeHtml(answer.user_answer)}</p>
-          <span>${correct ? "答对" : "未答对"} · ${escapeHtml(formatDateTime(answer.answer_time))} · ${answer.costtime} 秒</span>
+          ${feedback}
+          <span>${scoreLabel} · ${escapeHtml(formatDateTime(answer.answer_time))} · ${answer.costtime} 秒</span>
         </div>
       </div>
     `;
@@ -611,6 +674,9 @@ function bindEvents() {
     });
   });
   $("#answer-dialog").addEventListener("close", stopAnswerTimer);
+  $("#generate-dialog").addEventListener("close", () => {
+    state.generatedDraft = null;
+  });
 
   $("#plan-form").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -717,22 +783,41 @@ function bindEvents() {
     }
   });
 
+  $("#generate-result").addEventListener("click", (event) => {
+    if (event.target.closest("[data-save-draft]")) saveGeneratedDraft();
+  });
+
   $("#answer-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = event.currentTarget;
     const userAnswer = $("#answer-input").value.trim();
     if (!state.answerQuestionId || !userAnswer) return showToast("请先写下答案", "error");
+    const question = state.questions.find((item) => item.id === state.answerQuestionId);
+    const isTextQuestion = question?.question_type === "text";
     const costtime = Math.max(0, Math.floor((Date.now() - state.answerStartedAt) / 1000));
     setFormBusy(form, true);
     try {
-      const result = await api(`/questions/${state.answerQuestionId}/answers`, {
-        method: "POST",
-        body: JSON.stringify({ user_answer: userAnswer, costtime }),
-      });
+      let result;
+      if (isTextQuestion) {
+        result = await api(`/questions/${state.answerQuestionId}/answers/grade`, {
+          method: "POST",
+          body: JSON.stringify({ user_answer: userAnswer, costtime }),
+        });
+        renderGradeResult(result);
+      } else {
+        result = await api(`/questions/${state.answerQuestionId}/answers`, {
+          method: "POST",
+          body: JSON.stringify({ user_answer: userAnswer, costtime }),
+        });
+      }
       $("#answer-input").value = "";
       startAnswerTimer();
       await loadAnswerHistory(state.answerQuestionId);
-      showToast(result.scores === "1" ? "回答正确" : "已记录，再回看一遍资料");
+      if (isTextQuestion) {
+        showToast(`已批改：${result.score} 分`);
+      } else {
+        showToast(result.scores === "1" ? "回答正确" : "已记录，再回看一遍资料");
+      }
     } catch (error) {
       showToast(error.message, "error");
     } finally {

@@ -69,7 +69,12 @@ class DocumentChunk(Base):
 class Question(Base):
     __tablename__="question"
     id:Mapped[int]=mapped_column(primary_key=True)
-    system_answer:Mapped[int]=mapped_column()
+    question_type:Mapped[str]=mapped_column(String(16),default="numeric",server_default="numeric")
+    system_answer:Mapped[int|None]=mapped_column()
+    reference_answer:Mapped[str|None]=mapped_column(Text)
+    rubric:Mapped[str|None]=mapped_column(Text)
+    difficulty:Mapped[str|None]=mapped_column(String(16))
+    source_chunk_ids:Mapped[str|None]=mapped_column(Text)
     que:Mapped[str]=mapped_column(Text)
     doc_id:Mapped[int]=mapped_column(ForeignKey("documents.id",ondelete="CASCADE"),index=True)
 class Answer(Base):
@@ -79,6 +84,10 @@ class Answer(Base):
     answer_time:Mapped[str]=mapped_column(Text)
     user_answer:Mapped[str]=mapped_column(Text)
     scores:Mapped[str]=mapped_column(Text)
+    feedback:Mapped[str|None]=mapped_column(Text)
+    rubric_hits:Mapped[str|None]=mapped_column(Text)
+    rubric_misses:Mapped[str|None]=mapped_column(Text)
+    grade_model:Mapped[str|None]=mapped_column(Text)
     que_id:Mapped[int]=mapped_column(ForeignKey("question.id",ondelete="CASCADE"),index=True)
     owner_id:Mapped[int]=mapped_column(ForeignKey("users.user_id",ondelete="CASCADE"),index=True)
 

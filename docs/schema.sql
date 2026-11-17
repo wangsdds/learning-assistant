@@ -58,15 +58,22 @@ CREATE TABLE document_chunks(
 -- CREATE VIRTUAL TABLE document_chunks_fts USING fts5(
 --     content, content='document_chunks', content_rowid='id', tokenize='trigram'
 -- );
---表 5 系统出题/资料id(外键on delete cascade)，，id（主键），答题时间
+--表 5 系统出题/资料id(外键on delete cascade)，id（主键）
+-- question_type = numeric 时用 system_answer；text 时用 reference_answer + rubric
 CREATE TABLE question(
     doc_id INTEGER not null,
     id INTEGER PRIMARY KEY,
     que text not null,
-    system_answer INTEGER not null,
+    question_type text not null default 'numeric',
+    system_answer INTEGER,
+    reference_answer text,
+    rubric text,
+    difficulty text,
+    source_chunk_ids text,
     Foreign key(doc_id) REFERENCES documents(id)on delete cascade
 );
 --表6 题目id（外键），用户答案，答题时间，判的成绩，id（主键）
+-- rubric_hits / rubric_misses 存 JSON 数组；grade_model 记录批改模型
 CREATE table answer(
     owner_id integer not null,
     que_id INTEGER not null,
@@ -75,6 +82,10 @@ CREATE table answer(
     user_answer  text not null,
     costtime INTEGER not null,
     scores text not null,
+    feedback text,
+    rubric_hits text,
+    rubric_misses text,
+    grade_model text,
     Foreign key(que_id) REFERENCES question(id)on delete cascade,
     foreign key(owner_id) references users(user_id)on delete cascade
 );
