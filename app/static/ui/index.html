@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <title>学习助手 - 把学习进度留下来</title>
+  <link rel="stylesheet" href="/ui/styles.css">
+</head>
+<body>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <section id="auth-screen" class="auth-screen">
+    <div class="auth-story">
+      <div class="brand brand-inverse">
+        <span class="brand-mark">L</span>
+        <span>学习助手</span>
+      </div>
+      <div class="auth-copy">
+        <p class="eyebrow">LEARNING, MADE VISIBLE</p>
+        <h1>把今天的努力，<br><span>变成看得见的进步。</span></h1>
+        <p class="auth-lead">计划你要学什么，收好资料，给自己出题，再把每一次作答留下来。</p>
+        <div class="auth-points">
+          <span>每日计划</span>
+          <span>资料归档</span>
+          <span>自测与复盘</span>
+        </div>
+      </div>
+      <p class="auth-footnote">FastAPI · SQLAlchemy · JWT</p>
+    </div>
+
+    <div class="auth-panel">
+      <div class="auth-card">
+        <div class="mobile-brand brand">
+          <span class="brand-mark">L</span>
+          <span>学习助手</span>
+        </div>
+        <div class="auth-tabs" role="tablist" aria-label="登录或注册">
+          <button class="auth-tab active" type="button" data-auth-tab="login" role="tab" aria-selected="true">登录</button>
+          <button class="auth-tab" type="button" data-auth-tab="register" role="tab" aria-selected="false">注册</button>
+        </div>
+
+        <form id="login-form" class="auth-form" novalidate>
+          <div class="form-heading">
+            <h2>欢迎回来</h2>
+            <p>继续今天的学习。</p>
+          </div>
+          <label class="field">
+            <span>邮箱</span>
+            <input id="login-email" name="email" type="email" autocomplete="email" placeholder="you@example.com" required>
+          </label>
+          <label class="field">
+            <span>密码</span>
+            <input id="login-password" name="password" type="password" autocomplete="current-password" placeholder="输入密码" required>
+          </label>
+          <button class="button button-primary button-block" type="submit">登录</button>
+        </form>
+
+        <form id="register-form" class="auth-form hidden" novalidate>
+          <div class="form-heading">
+            <h2>创建账号</h2>
+            <p>从第一条学习计划开始。</p>
+          </div>
+          <label class="field">
+            <span>昵称</span>
+            <input id="register-nickname" name="nickname" type="text" autocomplete="nickname" placeholder="怎么称呼你" required>
+          </label>
+          <label class="field">
+            <span>邮箱</span>
+            <input id="register-email" name="email" type="email" autocomplete="email" placeholder="you@example.com" required>
+          </label>
+          <label class="field">
+            <span>密码</span>
+            <input id="register-password" name="password" type="password" autocomplete="new-password" minlength="8" placeholder="至少 8 位" required>
+          </label>
+          <button class="button button-primary button-block" type="submit">创建账号</button>
+        </form>
+        <p class="privacy-note">账号数据只保存在你自己的学习空间里。</p>
+      </div>
+    </div>
+  </section>
+
+  <div id="app-shell" class="app-shell hidden">
+    <aside id="sidebar" class="sidebar">
+      <div class="brand brand-inverse sidebar-brand">
+        <span class="brand-mark">L</span>
+        <span>学习助手</span>
+      </div>
+
+      <nav class="nav" aria-label="主导航">
+        <button class="nav-item active" type="button" data-view="dashboard">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h6V4H4v9Zm0 7h6v-5H4v5Zm10 0h6v-9h-6v9Zm0-16v5h6V4h-6Z"/></svg>
+          <span>工作台</span>
+        </button>
+        <button class="nav-item" type="button" data-view="plans">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2v3M17 2v3M3 9h18M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Zm3 8h3v3H8v-3Z"/></svg>
+          <span>学习计划</span>
+        </button>
+        <button class="nav-item" type="button" data-view="documents">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h10l4 4v14H5V3Zm9 1.5V8h3.5L14 4.5ZM8 12h8v2H8v-2Zm0 4h6v2H8v-2Z"/></svg>
+          <span>资料与题目</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-tip">
+        <span class="tip-label">今日提示</span>
+        <p>先选一份资料，再给自己出一道真正需要想一想的题。</p>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="user-chip">
+          <span id="user-initial" class="avatar">L</span>
+          <span class="user-meta">
+            <strong id="user-nickname">学习者</strong>
+            <small id="user-email"></small>
+          </span>
+        </div>
+        <button id="logout-button" class="icon-button" type="button" title="退出登录" aria-label="退出登录">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4H5v16h5M14 8l4 4-4 4M8 12h10"/></svg>
+        </button>
+      </div>
+    </aside>
+    <button id="sidebar-scrim" class="sidebar-scrim" type="button" aria-label="关闭导航"></button>
+
+    <main class="main">
+      <header class="topbar">
+        <button id="menu-toggle" class="icon-button menu-toggle" type="button" aria-label="打开导航">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+        <div class="topbar-title">
+          <span id="page-kicker">TODAY</span>
+          <strong id="page-title">工作台</strong>
+        </div>
+        <a class="button button-quiet button-small" href="/docs" target="_blank" rel="noopener">API 文档</a>
+      </header>
+
+      <div class="content">
+        <section id="view-dashboard" class="view active" aria-labelledby="dashboard-title">
+          <div class="hero-card">
+            <div>
+              <p class="eyebrow">YOUR LEARNING SPACE</p>
+              <h1 id="dashboard-title"><span id="dash-greeting">你好</span>，今天学点什么？</h1>
+              <p>把想做的事写进计划，把看过的资料收起来，然后认真回答一道自己出的题。</p>
+            </div>
+            <div class="hero-actions">
+              <button id="dash-add-plan" class="button button-primary" type="button">添加今日计划</button>
+              <button id="dash-add-doc" class="button button-secondary" type="button">收录资料</button>
+            </div>
+          </div>
+
+          <div class="stats-grid">
+            <article class="stat-card">
+              <span class="stat-icon">01</span>
+              <div><strong id="stat-plans">0</strong><span>学习计划</span></div>
+            </article>
+            <article class="stat-card">
+              <span class="stat-icon">02</span>
+              <div><strong id="stat-documents">0</strong><span>已收资料</span></div>
+            </article>
+            <article class="stat-card accent-card">
+              <span class="stat-icon">03</span>
+              <div><strong id="stat-user">你</strong><span>正在持续积累</span></div>
+            </article>
+          </div>
+
+          <div class="dashboard-grid">
+            <article class="card">
+              <div class="card-heading">
+                <div><span class="card-kicker">RECENT</span><h2>最近计划</h2></div>
+                <button class="text-button" type="button" data-go-view="plans">查看全部</button>
+              </div>
+              <div id="dash-plan-list" class="compact-list"></div>
+            </article>
+            <article class="card">
+              <div class="card-heading">
+                <div><span class="card-kicker">LIBRARY</span><h2>最近资料</h2></div>
+                <button class="text-button" type="button" data-go-view="documents">打开资料库</button>
+              </div>
+              <div id="dash-doc-list" class="compact-list"></div>
+            </article>
+          </div>
+        </section>
+
+        <section id="view-plans" class="view" aria-labelledby="plans-title">
+          <div class="section-heading">
+            <div><p class="eyebrow">PLAN YOUR WEEK</p><h1 id="plans-title">学习计划</h1><p>一天一条就够，重点是第二天还能看见。</p></div>
+            <button id="add-plan-button" class="button button-primary" type="button">新建计划</button>
+          </div>
+          <div id="plans-list" class="plan-list"></div>
+        </section>
+
+        <section id="view-documents" class="view" aria-labelledby="documents-title">
+          <div class="section-heading">
+            <div><p class="eyebrow">READ, TEST, REVIEW</p><h1 id="documents-title">资料与题目</h1><p>选中一份资料，在右边出题、答题并查看记录。</p></div>
+            <button id="add-doc-button" class="button button-primary" type="button">收录资料</button>
+          </div>
+          <div class="documents-layout">
+            <aside class="card documents-panel">
+              <div class="card-heading compact-heading"><h2>我的资料</h2><span id="doc-count" class="count-pill">0</span></div>
+              <div id="documents-list" class="document-list"></div>
+            </aside>
+            <section id="doc-detail" class="doc-detail"></section>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <dialog id="plan-dialog" class="dialog">
+    <form id="plan-form" class="dialog-card" method="dialog">
+      <div class="dialog-heading">
+        <div><span class="card-kicker">NEW PLAN</span><h2>新建学习计划</h2></div>
+        <button class="icon-button" type="button" data-close-dialog aria-label="关闭">×</button>
+      </div>
+      <label class="field"><span>今天要做什么</span><input id="plan-content" type="text" maxlength="32" placeholder="例如：复习 B+ 树与索引" required></label>
+      <label class="field"><span>计划日期</span><input id="plan-date" type="date" required></label>
+      <div class="dialog-actions"><button class="button button-secondary" type="button" data-close-dialog>取消</button><button class="button button-primary" type="submit">保存计划</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="document-dialog" class="dialog">
+    <form id="document-form" class="dialog-card" method="dialog">
+      <div class="dialog-heading">
+        <div><span class="card-kicker">NEW MATERIAL</span><h2>收录一份资料</h2></div>
+        <button class="icon-button" type="button" data-close-dialog aria-label="关闭">×</button>
+      </div>
+      <label class="field"><span>资料名称</span><input id="doc-name" type="text" maxlength="255" placeholder="例如：MySQL 索引原理" required></label>
+      <label class="field"><span>资料内容或文件路径</span><textarea id="doc-content" rows="4" maxlength="2000" placeholder="粘贴笔记、摘录或本地文件路径"></textarea></label>
+      <label class="field"><span>来源网址</span><input id="doc-url" type="url" maxlength="2000" placeholder="https://example.com/article"></label>
+      <p class="form-hint">资料内容与来源网址至少填写一项。</p>
+      <div class="dialog-actions"><button class="button button-secondary" type="button" data-close-dialog>取消</button><button class="button button-primary" type="submit">保存资料</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="question-dialog" class="dialog">
+    <form id="question-form" class="dialog-card" method="dialog">
+      <div class="dialog-heading">
+        <div><span class="card-kicker">NEW QUESTION</span><h2>给这份资料出一道题</h2></div>
+        <button class="icon-button" type="button" data-close-dialog aria-label="关闭">×</button>
+      </div>
+      <label class="field"><span>题目</span><textarea id="question-text" rows="4" maxlength="2000" placeholder="不看资料，你能说清楚什么？" required></textarea></label>
+      <label class="field"><span>标准答案（整数）</span><input id="system-answer" type="number" step="1" placeholder="用于提交答案后的判定" required></label>
+      <p class="form-hint">标准答案不会出现在答题页面，提交后只返回是否答对。</p>
+      <div class="dialog-actions"><button class="button button-secondary" type="button" data-close-dialog>取消</button><button class="button button-primary" type="submit">保存题目</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="answer-dialog" class="dialog dialog-wide">
+    <div class="dialog-card">
+      <div class="dialog-heading">
+        <div><span class="card-kicker">QUICK CHECK</span><h2>回答这道题</h2></div>
+        <button class="icon-button" type="button" data-close-dialog aria-label="关闭">×</button>
+      </div>
+      <div class="question-prompt">
+        <span class="question-number">QUESTION</span>
+        <p id="answer-question-text"></p>
+      </div>
+      <form id="answer-form" class="answer-form" method="dialog">
+        <label class="field"><span>你的答案</span><textarea id="answer-input" rows="3" maxlength="2000" placeholder="先自己回答，再提交" required></textarea></label>
+        <div class="answer-meta"><span>已用时 <strong id="answer-timer">00:00</strong></span><button class="button button-primary" type="submit">提交答案</button></div>
+      </form>
+      <div class="history-block">
+        <div class="card-heading compact-heading"><h3>作答记录</h3><span class="muted">最近在前</span></div>
+        <div id="answer-history" class="answer-history"></div>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="/ui/app.js" defer></script>
+</body>
+</html>

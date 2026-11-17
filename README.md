@@ -75,11 +75,16 @@ python tools/demo_flow.py
 # 3. 启动
 python -m uvicorn app.main:app --reload --port 8000
 
-# 4. 打开 Swagger
+# 4. 打开浏览器 UI
+# http://127.0.0.1:8000/ui/
+
+# 5. 打开 Swagger
 # http://127.0.0.1:8000/docs
 ```
 
 本机也可以直接跑 `.\run_api.ps1`（脚本里固定了 Python 与 site-packages 路径）。
+
+浏览器 UI 使用原生 HTML/CSS/JavaScript，与 API 同源部署，覆盖登录注册、学习计划、资料收录、建题、答题和作答历史。根路径 `/` 会自动跳转到 `/ui/`。
 
 一键演示会在内存 SQLite 中依次完成注册、登录、建计划、加资料、出题、答题和回看，不会污染 `app.db`。
 
@@ -154,7 +159,7 @@ pytest -q
 ```
 项目-学习助手/
 ├── app/                 # 应用代码
-├── tests/               # pytest（30 个用例）
+├── tests/               # pytest（32 个用例）
 ├── migrations/          # Alembic 迁移
 ├── docs/                # 表设计、评审记录、schema.sql
 ├── tools/               # bench_fk_index.py 等
@@ -172,8 +177,8 @@ pytest -q
 
 ## 截图清单（发帖 / 简历用）
 
-1. `http://127.0.0.1:8000/docs` 的 Swagger 首页
-2. `pytest -q` 的 `30 passed` 输出
-3. `python tools/bench_fk_index.py` 的优化前后对比
-4. `docs/schema.sql` 的六表关系图（dbdiagram.io 导入即可）
-5. 一次完整请求：注册 → 登录 → 建资料 → 出题 → 答题 → 回看
+1. `http://127.0.0.1:8000/ui/` 的工作台与资料答题页
+2. `http://127.0.0.1:8000/docs` 的 Swagger 首页
+3. `pytest -q` 的 `32 passed` 输出
+4. `python tools/bench_fk_index.py` 的优化前后对比
+5. `docs/schema.sql` 的六表关系图（dbdiagram.io 导入即可）

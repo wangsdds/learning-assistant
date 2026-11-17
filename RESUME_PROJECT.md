@@ -6,15 +6,15 @@
 
 ## 技术栈
 
-Python 3.13、FastAPI、SQLAlchemy 2.0、Alembic、SQLite / PostgreSQL、JWT、bcrypt、pytest、Swagger/OpenAPI
+Python 3.13、FastAPI、SQLAlchemy 2.0、Alembic、SQLite / PostgreSQL、JWT、bcrypt、pytest、Swagger/OpenAPI、HTML/CSS/JavaScript
 
 ## 简历项目栏（可直接使用）
 
 - 设计并实现多用户学习助手后端，覆盖注册登录、学习计划、资料、题目、答题记录等核心模块，提供 17 个 REST API。
 - 基于 JWT + bcrypt 实现认证与密码安全存储，所有业务查询按当前用户过滤；跨用户访问统一返回 404，避免泄露资源存在性。
 - 使用 SQLAlchemy 2.0 ORM 与 Alembic 管理 6 张表及外键级联，补充外键索引；在 5 万行测试数据上将关联查询从约 12.86ms 降至 0.138ms。
-- 使用 `APIRouter` 按领域拆分用户、资料、题目、答题和计划模块，并通过 pytest + 内存 SQLite 构建 30 个测试，覆盖认证、隔离、边界校验和完整业务闭环。
-- 提供 Swagger 文档、Alembic 迁移、演示脚本和启动说明，项目可本地复现和继续扩展。
+- 使用 `APIRouter` 按领域拆分用户、资料、题目、答题和计划模块，并通过 pytest + 内存 SQLite 构建 32 个测试，覆盖认证、隔离、边界校验和完整业务闭环。
+- 提供原生 JavaScript 浏览器 UI，覆盖登录注册、学习计划、资料、建题、答题和历史回看；通过 Nginx + systemd 部署到云服务器。
 
 ## 面试讲解提纲
 
@@ -34,11 +34,11 @@ Python 3.13、FastAPI、SQLAlchemy 2.0、Alembic、SQLite / PostgreSQL、JWT、b
 
 - 每个测试使用独立的内存 SQLite，通过 `dependency_overrides` 替换真实数据库。
 - 端到端测试覆盖：注册 → 登录 → 计划 → 资料 → 出题 → 答题 → 回看。
-- 先用测试锁定行为，再把单体 `main.py` 拆成多个 router；当前全套仍为 30 passed。
+- 先用测试锁定行为，再把单体 `main.py` 拆成多个 router；当前全套仍为 32 passed。
 
 ### 4. 当前边界
 
-当前版本是可演示的后端 MVP，检索层、RAG、agent loop、流式返回和生产部署尚未实现。面试时应明确区分“已完成”和“下一步计划”，不要把这些说成已完成。
+当前版本是可演示的全栈 MVP，已部署到云服务器；检索层、RAG、agent loop、流式返回，以及 PostgreSQL/Docker 的生产级部署尚未实现。面试时应明确区分“已完成”和“下一步计划”，不要把这些说成已完成。
 
 ## 演示顺序
 
@@ -49,11 +49,12 @@ python tools/demo_flow.py
 # 2. 运行测试
 pytest -q
 
-# 3. 启动服务并打开 Swagger
+# 3. 启动服务并打开浏览器 UI
 .\run_api.ps1
-# http://127.0.0.1:8000/docs
+# http://127.0.0.1:8000/ui/
+# API 文档：http://127.0.0.1:8000/docs
 ```
 
 ## 简历投递时的项目一句话
 
-> 独立开发多用户学习助手后端，使用 FastAPI + SQLAlchemy + JWT 实现计划、资料、出题与答题闭环，并以分层路由、数据库迁移和 30 个自动化测试保证可维护性。
+> 独立开发多用户学习助手全栈 MVP，使用 FastAPI + SQLAlchemy + JWT 实现计划、资料、出题与答题闭环，配套浏览器 UI、分层路由、数据库迁移和 32 个自动化测试。
