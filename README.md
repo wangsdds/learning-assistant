@@ -2,7 +2,7 @@
 
 > 一个多用户的学习计划 / 资料 / 检索 / 出题 / 答题应用。FastAPI + SQLAlchemy 2.0 + Alembic + SQLite FTS5，可接入 DeepSeek 或 OpenAI 兼容模型。
 
-`Python 3.13` · `FastAPI` · `SQLAlchemy 2.0` · `Alembic` · `JWT` · `FTS5` · `46 tests passed`
+`Python 3.13` · `FastAPI` · `SQLAlchemy 2.0` · `Alembic` · `JWT` · `FTS5` · `50 tests passed`
 
 ---
 
@@ -104,6 +104,10 @@ python -m uvicorn app.main:app --reload --port 8000
 一键演示会在内存 SQLite 中依次完成注册、登录、建计划、加资料、出题、答题和回看，不会污染 `app.db`。
 
 简历和面试讲解材料见 [`RESUME_PROJECT.md`](RESUME_PROJECT.md)。
+Agent 开发与服务器部署的面试知识点见 [`docs/INTERVIEW_AGENT_DEPLOY.md`](docs/INTERVIEW_AGENT_DEPLOY.md)。
+GitHub 后端项目阅读路线见 [`docs/GITHUB_BACKEND_READING.md`](docs/GITHUB_BACKEND_READING.md)。
+Agent 与服务器部署自学资料见 [`docs/AGENT_DEPLOY_RESOURCES.md`](docs/AGENT_DEPLOY_RESOURCES.md)。
+简历项目八股与口述稿见 [`docs/RESUME_INTERVIEW_QA.md`](docs/RESUME_INTERVIEW_QA.md)。
 
 环境变量：
 
@@ -153,8 +157,8 @@ POST /questions/{id}/answers/grade
 | POST | `/users` | 注册（邮箱重复返回 409） |
 | POST | `/login` | 登录，返回 JWT |
 | GET | `/me` | 当前用户 |
-| GET | `/users/{user_id}` | 用户详情 |
-| GET | `/users/by-email/{email}` | 按邮箱查用户 |
+| GET | `/users/{user_id}` | 用户详情（仅可查询自己） |
+| GET | `/users/by-email/{email}` | 按邮箱查用户（仅可查询自己） |
 | GET | `/documents` | 资料列表 |
 | POST | `/documents` | 新建资料 |
 | GET | `/documents/{document_id}` | 资料详情 |
@@ -177,12 +181,13 @@ POST /questions/{id}/answers/grade
 
 ```powershell
 pytest -q
-# 46 passed
+# 50 passed
 ```
 
 覆盖的关键边界：
 
 - 未登录访问业务接口 → 401
+- 未登录查询用户、查询其他用户 → 401 / 404
 - 访问别人的资源 → 404（不是 403，避免泄露资源是否存在）
 - 重复邮箱注册 → 409
 - 只改题干 / 只改答案 / 空对象 / 空题干
@@ -215,7 +220,7 @@ pytest -q
 ```
 项目-学习助手/
 ├── app/                 # 应用代码
-├── tests/               # pytest（46 个用例）
+├── tests/               # pytest（50 个用例）
 ├── migrations/          # Alembic 迁移
 ├── docs/                # 表设计、评审记录、schema.sql
 ├── tools/               # bench_fk_index.py 等
@@ -226,7 +231,7 @@ pytest -q
 ## 已知限制 / Roadmap
 
 - [ ] 统一异常响应格式与分页
-- [ ] 用户查询接口的权限收敛（仅允许本人访问）
+- [x] 用户查询接口的权限收敛（仅允许本人访问）
 - [x] 检索层：资料切片 + SQLite FTS5
 - [x] 结构化题目生成（带答案、rubric 和来源）
 - [x] 基于 rubric 的文本题 AI 批改与评分明细持久化
@@ -238,6 +243,6 @@ pytest -q
 
 1. `http://127.0.0.1:8000/ui/` 的工作台与资料答题页
 2. `http://127.0.0.1:8000/docs` 的 Swagger 首页
-3. `pytest -q` 的 `46 passed` 输出
+3. `pytest -q` 的 `50 passed` 输出
 4. `python tools/bench_fk_index.py` 的优化前后对比
 5. `docs/schema.sql` 的表关系图（dbdiagram.io 导入即可）

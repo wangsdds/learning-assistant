@@ -15,7 +15,7 @@ Python 3.13、FastAPI、SQLAlchemy 2.0、Alembic、SQLite / PostgreSQL、SQLite 
 - 使用 SQLAlchemy 2.0 ORM 与 Alembic 管理 7 张表及外键级联，补充外键索引；在 5 万行测试数据上将关联查询从约 12.86ms 降至 0.138ms。
 - 实现资料切片与 SQLite FTS5 检索，短查询自动降级为词项匹配；调用 DeepSeek / OpenAI 兼容模型生成带标准答案、rubric、难度和引用来源的结构化题目草稿。
 - 实现文本题 AI 批改：服务端隐藏参考答案，按 rubric 输出 0-100 分、命中点、遗漏点和改进建议，并将评分明细持久化到作答历史。
-- 使用 `APIRouter` 按领域拆分用户、资料、题目、答题、计划和 RAG 模块，并通过 pytest + 内存 SQLite 构建 46 个测试，覆盖认证、隔离、边界校验、中文检索、草稿入库和 AI 批改。
+- 使用 `APIRouter` 按领域拆分用户、资料、题目、答题、计划和 RAG 模块，并通过 pytest + 内存 SQLite 构建 50 个测试，覆盖认证、隔离、边界校验、中文检索、草稿入库和 AI 批改。
 - 提供原生 JavaScript 浏览器 UI，覆盖登录注册、学习计划、资料、建题、答题和历史回看；通过 Nginx + systemd 部署到云服务器。
 
 ## 面试讲解提纲
@@ -36,7 +36,7 @@ Python 3.13、FastAPI、SQLAlchemy 2.0、Alembic、SQLite / PostgreSQL、SQLite 
 
 - 每个测试使用独立的内存 SQLite，通过 `dependency_overrides` 替换真实数据库。
 - 端到端测试覆盖：注册 → 登录 → 计划 → 资料 → 出题 → 答题 → 回看。
-- 先用测试锁定行为，再把单体 `main.py` 拆成多个 router；当前全套为 46 passed。
+- 先用测试锁定行为，再把单体 `main.py` 拆成多个 router；当前全套为 50 passed。
 
 ### 4. 检索、结构化出题与批改
 
@@ -66,4 +66,4 @@ pytest -q
 
 ## 简历投递时的项目一句话
 
-> 独立开发多用户学习助手全栈 MVP，使用 FastAPI + SQLAlchemy + JWT 实现计划、资料、FTS5 检索、RAG 结构化出题、文本题 AI 批改与答题闭环，配套浏览器 UI、云服务器部署、数据库迁移和 46 个自动化测试。
+> 独立开发多用户学习助手全栈 MVP，使用 FastAPI + SQLAlchemy + JWT 实现计划、资料、FTS5 检索、RAG 结构化出题、文本题 AI 批改与答题闭环，配套浏览器 UI、云服务器部署、数据库迁移和 50 个自动化测试。
