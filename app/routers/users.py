@@ -50,16 +50,20 @@ def create_user(payload: UserCreate, session: Session = Depends(get_session)):
 
 
 @router.get("/users/by-email/{email}", response_model=UserOut)
-def get_email(email: str, session: Session = Depends(get_session)):
-    user = session.scalar(select(User).where(User.email == email))
-    if user is None:
+def get_email(
+    email: str,
+    current_user: User = Depends(get_current_user),
+):
+    if email.lower() != current_user.email.lower():
         raise HTTPException(status_code=404, detail="user not found")
-    return user
+    return current_user
 
 
 @router.get("/users/{user_id}", response_model=UserOut)
-def get_user(user_id: int, session: Session = Depends(get_session)):
-    user = session.scalar(select(User).where(User.user_id == user_id))
-    if user is None:
+def get_user(
+    user_id: int,
+    current_user: User = Depends(get_current_user),
+):
+    if user_id != current_user.user_id:
         raise HTTPException(status_code=404, detail="user not found")
-    return user
+    return current_user
