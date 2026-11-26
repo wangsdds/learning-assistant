@@ -6,15 +6,15 @@
 
 ## 1. 30 秒项目介绍
 
-> 我做了一个多用户学习助手，后端是 FastAPI + SQLAlchemy + SQLite，前端用原生 JavaScript。用户可以管理学习资料和计划，资料会自动切片并用 FTS5 检索；系统基于检索片段生成带答案、rubric 和引用来源的题目草稿，用户确认后入库；文本题作答后会按 rubric 做 AI 批改，并把分数、命中点、遗漏点和反馈保存到历史。项目有 JWT 鉴权、多用户隔离、Alembic 迁移、Nginx + systemd 部署和 50 个自动化测试。当前是单轮 RAG 工作流，多轮学习会话是下一步。
+> 我做了一个多用户学习助手，后端是 FastAPI + SQLAlchemy + SQLite，前端用原生 JavaScript。资料会切片并用 FTS5 检索，PydanticAI StudyAgent 可以自主调用检索工具生成带答案、rubric 和引用来源的题目草稿，服务端校验来源后才允许入库；文本题作答后按 rubric 做 AI 批改并保存历史。项目有 JWT 鉴权、多用户隔离、Alembic 迁移、Nginx + systemd 部署和 56 个自动化测试。当前是单轮受限 Agent，多轮状态机是下一步。
 
 ## 2. 90 秒项目介绍
 
 1. **业务**：解决“计划、资料、出题、自测、复盘分散”的问题。
-2. **链路**：资料写入 → 切片 → FTS5 检索 → 模型出题草稿 → 用户确认入库 → 作答 → rubric 批改 → 历史记录。
-3. **难点**：用户隔离、检索片段约束、模型结构化输出、参考答案不下发、批改结果持久化。
-4. **工程**：SQLAlchemy + Alembic、pytest + 内存 SQLite、Nginx + systemd 部署。
-5. **边界**：是 RAG + 单轮 AI 工作流，不是完整自主 Agent；向量检索、多轮会话和 PostgreSQL 生产化尚未完成。
+2. **链路**：资料写入 → 切片 → FTS5 检索 → StudyAgent 调用检索工具 → 结构化草稿 → 来源校验 → 用户确认入库 → 作答 → rubric 批改 → 历史记录。
+3. **难点**：用户隔离、工具权限边界、检索片段约束、模型结构化输出、参考答案不下发、批改结果持久化。
+4. **工程**：SQLAlchemy + Alembic、PydanticAI、pytest + 内存 SQLite、Nginx + systemd 部署。
+5. **边界**：是单轮受限 Agent，不是多轮自主 Agent；向量检索、多轮会话和 PostgreSQL 生产化尚未完成。
 
 ## 3. 必背问答
 
@@ -24,7 +24,7 @@
 
 ### Q2：项目整体架构是什么？
 
-> FastAPI 入口挂多个 `APIRouter`，按 users、documents、questions、answers、plan_days、rag 拆分。Pydantic 负责请求和响应校验，SQLAlchemy 2.0 负责 ORM，Alembic 管迁移，SQLite 存业务数据和 FTS5 索引。UI 是原生 HTML/CSS/JS，与 API 同源。
+> FastAPI 入口挂多个 `APIRouter`，按 users、documents、questions、answers、plan_days、rag、study_agent 拆分。Pydantic 负责请求和响应校验，SQLAlchemy 2.0 负责 ORM，Alembic 管迁移，SQLite 存业务数据和 FTS5 索引；StudyAgent 通过 PydanticAI 调用检索工具并返回类型化草稿。UI 是原生 HTML/CSS/JS，与 API 同源。
 
 ### Q3：为什么选 FastAPI？
 
@@ -80,7 +80,7 @@
 
 ### Q16：测试怎么做的？为什么不用真实模型？
 
-> pytest 使用独立的内存 SQLite，通过 `dependency_overrides` 替换数据库；模型测试用 Fake LLM，避免外部网络和随机性。50 个测试覆盖认证、跨用户隔离、输入边界、级联删除、中文检索、草稿来源校验、批改落库和完整闭环。真实模型只做少量人工冒烟测试。
+> pytest 使用独立的内存 SQLite，通过 `dependency_overrides` 替换数据库；普通模型测试用 Fake LLM，Agent 测试用 PydanticAI `FunctionModel`，避免外部网络和随机性。56 个测试覆盖认证、跨用户隔离、输入边界、级联删除、中文检索、工具调用轨迹、非法来源重试、草稿来源校验、批改落库和完整闭环。真实模型只做少量人工冒烟测试。
 
 ### Q17：怎么部署的？
 
@@ -92,42 +92,47 @@
 
 ### Q19：项目最大的难点是什么？
 
-> 不是调用模型，而是把模型放进可控的后端链路：用户隔离、只给相关片段、结构化输出、来源校验、参考答案不下发、草稿确认、批改落库和失败处理。下一步真正难的是多轮状态和评估，而不是再换一个模型。
+> 不是调用模型，而是把模型放进可控的后端链路：用户隔离、只给相关片段、工具权限由 `RunContext` 注入、结构化输出、来源校验、参考答案不下发、草稿确认、批改落库和失败处理。下一步真正难的是多轮状态和评估，而不是再换一个模型。
 
 ### Q20：当前不足和下一步？
 
-> 已完成 RAG 出题、草稿入库、单轮 rubric 批改和部署。未完成多轮学习会话、agent loop、向量检索、流式输出、HTTPS、AI 接口限流和 PostgreSQL 生产化。下一步先做 `study_sessions` 和 `session_events`，最多 5 轮，记录状态、工具调用、分数和薄弱点，再建立评估集。
+> 已完成 RAG 出题、PydanticAI 单轮受限 StudyAgent、草稿入库、单轮 rubric 批改和部署。未完成多轮学习会话、跨请求状态恢复、向量检索、流式输出、HTTPS、AI 接口限流和 PostgreSQL 生产化。下一步先做 `study_sessions` 和 `session_events`，用 LangGraph 做最多 5 轮的状态机，记录工具调用、分数和薄弱点，再建立评估集。
+
+### Q21：PydanticAI StudyAgent 具体怎么做的？
+
+> `StudyDeps` 里放数据库 Session、当前 `user_id` 和 `document_id`，模型只能通过 `RunContext` 拿到这些权限，工具参数里没有用户身份。`search_documents` 只查当前用户拥有的当前文档，并记录本轮真实返回的 chunk；输出类型是 `GeneratedQuestionDraft`，`output_validator` 再检查 `source_chunk_ids` 是否全部来自本轮检索，不合法就抛 `ModelRetry`。最后用 `UsageLimits` 限制 4 次请求、6 次工具调用，并设置 20 秒工具超时。
 
 ## 4. 简历数字怎么防守
 
 | 简历写法 | 面试时必须能解释 |
 |---|---|
-| 22 个 REST 操作 | 是方法+路径操作数，不是 22 张表 |
+| 23 个 REST 操作 | 是方法+路径操作数，不是 23 张表 |
 | 7 张表 | users、plan_days、newplan、documents、document_chunks、question、answer |
 | 93× / 150× | 5 万用户、20 万计划的本地 SQLite benchmark；不是生产压测 |
-| 50 个测试 | 内存 SQLite + Fake LLM；覆盖认证、隔离、检索、草稿、批改 |
+| 56 个测试 | 内存 SQLite + Fake LLM / PydanticAI FunctionModel；覆盖认证、隔离、检索、Agent、草稿、批改 |
+| PydanticAI StudyAgent | 单轮受限 Agent，能调用检索工具；不是多轮自主 Agent |
 | AI 批改 | 单轮 rubric 反馈，不是正式考试评分 |
 | 云服务器部署 | Nginx + systemd + Uvicorn + SQLite，单机，不是高可用集群 |
 | PostgreSQL | 技术栈兼容方向，不是已经上线的数据库 |
 
 ## 5. 十句必须脱口而出的锚点
 
-1. **项目定位**：多用户学习助手，RAG 出题 + 单轮 rubric 批改。
+1. **项目定位**：多用户学习助手，PydanticAI 受限 StudyAgent + RAG 出题 + 单轮 rubric 批改。
 2. **请求链路**：HTTP → APIRouter → Depends 认证 → Session → SQLite。
 3. **用户隔离**：user_id 来自 JWT，跨用户统一 404。
 4. **认证**：JWT 无状态，bcrypt 加盐，邮箱唯一靠数据库约束。
 5. **数据库**：外键 CASCADE，SQLite 开 `PRAGMA foreign_keys=ON`，外键补索引。
 6. **索引**：B+ 树、二级索引、回表、覆盖索引。
 7. **检索**：切片 → FTS5 trigram → BM25 → 短查询 LIKE 回退。
-8. **防幻觉**：片段约束 + 严格 JSON + Pydantic + 来源 ID 过滤 + 草稿确认。
+8. **防幻觉**：片段约束 + 工具白名单 + Pydantic 结构校验 + `output_validator` 来源校验 + 草稿确认。
 9. **批改**：参考答案隐藏，rubric 输出分数/命中/遗漏/反馈并落库。
 10. **部署**：Nginx → Uvicorn → FastAPI → SQLite，systemd 拉起，Alembic 先迁移。
 
 ## 6. 千万别说
 
-- “我做了完整 Agent。” → 当前是 RAG + 工作流。
+- “我做了多轮自主 Agent。” → 当前是单轮受限 Agent，多轮状态机还没做。
 - “AI 批改很准确。” → 是学习反馈，不是正式评分。
 - “用了 PostgreSQL。” → 当前线上是 SQLite。
 - “高可用、高并发。” → 单机 MVP，没有压测和集群。
 - “向量检索也做了。” → 没有。
-- “50 个测试覆盖所有情况。” → 覆盖关键边界，不等于全覆盖。
+- “56 个测试覆盖所有情况。” → 覆盖关键边界，不等于全覆盖。

@@ -2,7 +2,7 @@
 
 > 一个多用户的学习计划 / 资料 / 检索 / 出题 / 答题应用。FastAPI + SQLAlchemy 2.0 + Alembic + SQLite FTS5，可接入 DeepSeek 或 OpenAI 兼容模型。
 
-`Python 3.13` · `FastAPI` · `SQLAlchemy 2.0` · `Alembic` · `JWT` · `FTS5` · `50 tests passed`
+`Python 3.13` · `FastAPI` · `SQLAlchemy 2.0` · `Alembic` · `JWT` · `FTS5` · `PydanticAI` · `56 tests passed`
 
 ---
 
@@ -12,6 +12,7 @@
 
 - 每个用户有自己的资料、题目、答题记录和计划，互相看不到
 - 资料自动切片并用 SQLite FTS5 检索，模型可以根据引用片段生成结构化题目草稿
+- 基于 PydanticAI 的受限 StudyAgent 会自主调用检索工具，服务端再校验来源、步数和工具调用上限
 - 整数题服务端精确判分；文本题按 rubric 调用模型批改，返回分数、命中点和遗漏点
 - 有测试、有迁移、有性能实测，不是只能跑一遍的 demo
 
@@ -26,6 +27,7 @@
 | 计划 | 按天建计划、列表、详情 |
 | 检索 | 资料自动切片；SQLite FTS5 检索，短查询自动回退到词项匹配 |
 | 智能出题 | 检索相关片段，调用 DeepSeek / OpenAI 兼容模型返回题目、答案、rubric 和引用来源；草稿可一键入库 |
+| StudyAgent | 使用 PydanticAI 将 `search_documents` 注册为工具；通过 `RunContext` 注入用户和文档归属，结构化输出后校验引用来源，并限制请求步数、工具次数和超时 |
 | 自动批改 | 按参考答案和 rubric 评分，返回 0-100 分、命中要点、遗漏要点和改进建议，并持久化到作答记录 |
 | 隔离 | 所有业务查询都带 `user_id`，跨用户访问统一返回 404 |
 
@@ -38,6 +40,7 @@
 - **认证**：JWT（PyJWT，HS256）+ bcrypt
 - **测试**：pytest + FastAPI TestClient，内存 SQLite
 - **检索**：SQLite FTS5（trigram）+ 词项回退
+- **Agent**：PydanticAI 2.75，类型化依赖、函数工具、结构化输出和 `output_validator`
 - **模型**：DeepSeek / OpenAI 兼容 Chat Completions，服务端环境变量配置
 
 ## 架构
@@ -52,13 +55,15 @@ app/
 ├── chunking.py      # 资料切片
 ├── retrieval.py     # FTS5 索引、检索与回退
 ├── llm.py           # DeepSeek / OpenAI 兼容出题客户端
-└── routers/         # users / documents / questions / answers / plan_days / rag
+├── study_agent.py   # PydanticAI Agent、检索工具、依赖注入和来源校验
+└── routers/         # users / documents / questions / answers / plan_days / rag / study_agent
 ```
 
 请求链路：
 
 ```
 HTTP → APIRouter → Depends(get_current_user) → SQLAlchemy Session → SQLite / PostgreSQL
+                                                     └── StudyAgent → search_documents（仅当前用户、当前文档）
 ```
 
 ## 数据模型（7 张表）
@@ -96,7 +101,7 @@ python -m uvicorn app.main:app --reload --port 8000
 # http://127.0.0.1:8000/docs
 ```
 
-本机也可以直接跑 `.\run_api.ps1`（脚本里固定了 Python 与 site-packages 路径）。
+Windows 也可以直接跑 `.\run_api.ps1`；脚本优先使用项目 `.venv`，可用 `LEARNING_ASSISTANT_PYTHON` 指定其他解释器。
 
 浏览器 UI 使用原生 HTML/CSS/JavaScript，与 API 同源部署，覆盖登录注册、学习计划、资料收录、建题、答题和作答历史。根路径 `/` 会自动跳转到 `/ui/`。
 在资料详情中点击「AI 出题」，系统会先检索切片，再生成带标准答案、评分要点和引用来源的题目草稿。
@@ -140,6 +145,8 @@ POST /documents
   → 自动切片并写入 FTS5
 GET  /documents/{id}/search?q=回表
   → 返回相关片段
+POST /documents/{id}/study-agent
+  → Agent 自主调用 search_documents，返回带来源校验和运行指标的草稿
 POST /documents/{id}/generate-question
   → 返回题目、答案、rubric、难度和引用来源
 POST /documents/{id}/questions/from-draft
@@ -150,7 +157,7 @@ POST /questions/{id}/answers/grade
 
 模型生成结果先作为草稿展示，用户确认后再写入 `question` 表。参考答案和 rubric 不会通过题目列表接口返回；批改结果的命中点、遗漏点和反馈会随作答记录保存。
 
-## API 概览（18 个路径 / 22 个操作）
+## API 概览（19 个路径 / 23 个操作）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -165,6 +172,7 @@ POST /questions/{id}/answers/grade
 | POST | `/documents/{document_id}/reindex` | 重建资料切片与全文索引 |
 | GET | `/documents/{document_id}/search` | 在本人资料中检索相关片段 |
 | POST | `/documents/{document_id}/generate-question` | 检索并生成结构化题目草稿 |
+| POST | `/documents/{document_id}/study-agent` | PydanticAI Agent 检索并生成受来源约束的题目草稿 |
 | POST | `/documents/{document_id}/questions` | 给资料建题 |
 | POST | `/documents/{document_id}/questions/from-draft` | 保存 AI 草稿为正式文本题 |
 | GET | `/documents/{document_id}/questions` | 资料的题目列表 |
@@ -181,7 +189,7 @@ POST /questions/{id}/answers/grade
 
 ```powershell
 pytest -q
-# 50 passed
+# 56 passed
 ```
 
 覆盖的关键边界：
@@ -195,6 +203,7 @@ pytest -q
 - 删除用户后关联表级联清空
 - 资料切片长度、中文检索、跨用户检索隔离
 - 模型返回值的结构化校验和来源约束（测试使用 Fake LLM）
+- StudyAgent 的工具调用轨迹、非法来源重试、跨用户隔离、运行上限和异常映射
 - 文本题答案不外泄、草稿引用片段归属校验、批改明细持久化和跨用户批改隔离
 
 ## 性能实测
@@ -220,7 +229,7 @@ pytest -q
 ```
 项目-学习助手/
 ├── app/                 # 应用代码
-├── tests/               # pytest（50 个用例）
+├── tests/               # pytest（56 个用例）
 ├── migrations/          # Alembic 迁移
 ├── docs/                # 表设计、评审记录、schema.sql
 ├── tools/               # bench_fk_index.py 等
@@ -234,8 +243,9 @@ pytest -q
 - [x] 用户查询接口的权限收敛（仅允许本人访问）
 - [x] 检索层：资料切片 + SQLite FTS5
 - [x] 结构化题目生成（带答案、rubric 和来源）
+- [x] PydanticAI 单轮受限 StudyAgent（工具调用 + 结构化输出 + 来源校验）
 - [x] 基于 rubric 的文本题 AI 批改与评分明细持久化
-- [ ] 学习会话状态和 agent loop
+- [ ] 多轮学习会话状态和 LangGraph 状态机
 - [ ] 向量检索与混合召回
 - [ ] 生产部署：PostgreSQL + Docker Compose
 
@@ -243,6 +253,10 @@ pytest -q
 
 1. `http://127.0.0.1:8000/ui/` 的工作台与资料答题页
 2. `http://127.0.0.1:8000/docs` 的 Swagger 首页
-3. `pytest -q` 的 `50 passed` 输出
+3. `pytest -q` 的 `56 passed` 输出
 4. `python tools/bench_fk_index.py` 的优化前后对比
 5. `docs/schema.sql` 的表关系图（dbdiagram.io 导入即可）
+
+## License
+
+MIT

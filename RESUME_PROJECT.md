@@ -2,20 +2,21 @@
 
 ## 一句话项目介绍
 
-基于 FastAPI + SQLAlchemy 构建的多用户学习助手，支持学习计划、资料管理、FTS5 检索、结构化题目生成、文本题 AI 批改和记录回看，使用 JWT 认证并按用户隔离数据。
+基于 FastAPI + SQLAlchemy 构建的多用户学习助手，支持学习计划、资料管理、FTS5 检索、PydanticAI 受限 StudyAgent、结构化题目生成、文本题 AI 批改和记录回看，使用 JWT 认证并按用户隔离数据。
 
 ## 技术栈
 
-Python 3.13、FastAPI、SQLAlchemy 2.0、Alembic、SQLite / PostgreSQL、SQLite FTS5、DeepSeek / OpenAI 兼容 API、JWT、bcrypt、pytest、Swagger/OpenAPI、HTML/CSS/JavaScript
+Python 3.13、FastAPI、SQLAlchemy 2.0、Alembic、SQLite / PostgreSQL、SQLite FTS5、PydanticAI 2.75、DeepSeek / OpenAI 兼容 API、JWT、bcrypt、pytest、Swagger/OpenAPI、HTML/CSS/JavaScript
 
 ## 简历项目栏（可直接使用）
 
-- 设计并实现多用户学习助手全栈应用，覆盖注册登录、学习计划、资料、题目、AI 出题、自动批改和答题记录等核心模块，提供 22 个 REST 操作。
+- 设计并实现多用户学习助手全栈应用，覆盖注册登录、学习计划、资料、题目、AI 出题、StudyAgent、自动批改和答题记录等核心模块，提供 23 个 REST 操作。
 - 基于 JWT + bcrypt 实现认证与密码安全存储，所有业务查询按当前用户过滤；跨用户访问统一返回 404，避免泄露资源存在性。
 - 使用 SQLAlchemy 2.0 ORM 与 Alembic 管理 7 张表及外键级联，补充外键索引；在 5 万行测试数据上将关联查询从约 12.86ms 降至 0.138ms。
 - 实现资料切片与 SQLite FTS5 检索，短查询自动降级为词项匹配；调用 DeepSeek / OpenAI 兼容模型生成带标准答案、rubric、难度和引用来源的结构化题目草稿。
+- 基于 PydanticAI 实现类型化 StudyAgent，将资料检索和题目草稿生成封装为工具；通过 `RunContext` 注入用户身份和文档归属，使用结构化输出与 `output_validator` 限制引用来源，并设置请求步数、工具调用次数和超时上限。
 - 实现文本题 AI 批改：服务端隐藏参考答案，按 rubric 输出 0-100 分、命中点、遗漏点和改进建议，并将评分明细持久化到作答历史。
-- 使用 `APIRouter` 按领域拆分用户、资料、题目、答题、计划和 RAG 模块，并通过 pytest + 内存 SQLite 构建 50 个测试，覆盖认证、隔离、边界校验、中文检索、草稿入库和 AI 批改。
+- 使用 `APIRouter` 按领域拆分用户、资料、题目、答题、计划、RAG 和 StudyAgent 模块，并通过 pytest + 内存 SQLite 构建 56 个测试，覆盖认证、隔离、边界校验、中文检索、Agent 工具轨迹、来源校验、草稿入库和 AI 批改。
 - 提供原生 JavaScript 浏览器 UI，覆盖登录注册、学习计划、资料、建题、答题和历史回看；通过 Nginx + systemd 部署到云服务器。
 
 ## 面试讲解提纲
@@ -36,18 +37,21 @@ Python 3.13、FastAPI、SQLAlchemy 2.0、Alembic、SQLite / PostgreSQL、SQLite 
 
 - 每个测试使用独立的内存 SQLite，通过 `dependency_overrides` 替换真实数据库。
 - 端到端测试覆盖：注册 → 登录 → 计划 → 资料 → 出题 → 答题 → 回看。
-- 先用测试锁定行为，再把单体 `main.py` 拆成多个 router；当前全套为 50 passed。
+- 先用测试锁定行为，再把单体 `main.py` 拆成多个 router；当前全套为 56 passed。
 
 ### 4. 检索、结构化出题与批改
 
 - 资料写入后按长度和句界切成重叠片段，使用 FTS5 trigram 索引；中文短查询不足三个字符时回退到词项匹配。
 - 出题前只把当前用户、当前资料的相关片段交给模型，要求返回严格 JSON；服务端用 Pydantic 校验结构，并过滤不属于检索结果的来源 ID。
+- StudyAgent 通过 `StudyDeps` 注入 `Session`、`user_id` 和 `document_id`，模型只能调用只含 `query` 参数的 `search_documents`，不能自行指定用户或文档。
+- Agent 第一轮调用检索工具，第二轮返回 `GeneratedQuestionDraft`；`output_validator` 检查 `source_chunk_ids` 是否全部来自本轮检索，不合法时抛出 `ModelRetry`。
+- 运行层使用 `UsageLimits(request_limit=4, tool_calls_limit=6)` 和 `tool_timeout=20` 限制自循环、工具滥用和慢调用。
 - 模型只负责生成草稿和批改建议，不直接写数据库；草稿需要用户确认后才写入正式题表，参考答案与 rubric 不通过列表接口返回。
 - 批改只依据参考答案和 rubric 评分；密钥保存在服务端环境变量，资料文本和学生答案都被视为不可信输入，Prompt 明确要求忽略其中的指令。
 
 ### 5. 当前边界
 
-已完成 FTS5 检索、RAG 结构化出题草稿、草稿入库和基于 rubric 的文本题 AI 批改。学习会话状态、agent loop、向量检索、流式返回，以及 PostgreSQL/Docker 的生产级部署尚未实现。面试时应明确区分“已完成”和“下一步计划”，不要把这些说成已完成。
+已完成 FTS5 检索、RAG 结构化出题草稿、PydanticAI 单轮受限 StudyAgent、草稿入库和基于 rubric 的文本题 AI 批改。StudyAgent 能自主选择检索词并调用工具，但还没有多轮学习会话、跨请求状态恢复或自主规划；向量检索、流式返回，以及 PostgreSQL/Docker 的生产级部署也尚未实现。下一步用 LangGraph 做状态机。面试时应明确区分“单轮受限 Agent”和“多轮自主 Agent”，不要把后者说成已完成。
 
 ## 演示顺序
 
@@ -66,4 +70,4 @@ pytest -q
 
 ## 简历投递时的项目一句话
 
-> 独立开发多用户学习助手全栈 MVP，使用 FastAPI + SQLAlchemy + JWT 实现计划、资料、FTS5 检索、RAG 结构化出题、文本题 AI 批改与答题闭环，配套浏览器 UI、云服务器部署、数据库迁移和 50 个自动化测试。
+> 独立开发多用户学习助手全栈 MVP，使用 FastAPI + SQLAlchemy + JWT 实现计划、资料、FTS5 检索、PydanticAI 受限 StudyAgent、RAG 结构化出题、文本题 AI 批改与答题闭环，配套浏览器 UI、云服务器部署、数据库迁移和 56 个自动化测试。

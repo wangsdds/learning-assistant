@@ -218,6 +218,10 @@ class QuestionGenerationRequest(BaseModel):
         return value or None
 
 
+class StudyAgentRequest(QuestionGenerationRequest):
+    pass
+
+
 class GeneratedQuestionDraft(BaseModel):
     question: str = Field(min_length=1, max_length=1200)
     expected_answer: str = Field(min_length=1, max_length=4000)
@@ -245,6 +249,11 @@ class GeneratedQuestionDraft(BaseModel):
 class GeneratedQuestionOut(GeneratedQuestionDraft):
     model: str
     sources: list[ChunkSearchResult]
+
+
+class StudyAgentOut(GeneratedQuestionOut):
+    tool_calls: int = Field(ge=0)
+    steps: int = Field(ge=1)
 
 
 class QuestionDraftCreate(GeneratedQuestionDraft):

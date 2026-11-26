@@ -1,6 +1,6 @@
 # 部署说明（Ubuntu 22.04）
 
-目标服务器：`your-server-ip-or-domain`
+目标服务器：`your-server-ip-or-domain`（部署时替换为实际地址）
 
 ## 架构
 
